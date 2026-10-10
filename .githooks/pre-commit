@@ -1,0 +1,33 @@
+#!/bin/bash
+# Bench pre commit hook: reject a commit whose staged files contain any term from the denylist.
+# The denylist lives outside the repository (~/.bench/denylist.txt), so the terms never enter git.
+# Turn it on once per clone with: git config core.hooksPath .githooks
+set -euo pipefail
+
+DENYLIST="${BENCH_HOME:-$HOME/.bench}/denylist.txt"
+if [ ! -f "$DENYLIST" ]; then
+  echo "pre-commit: $DENYLIST not found. Run 'bench init' (or 'uv run bench init') first." >&2
+  exit 1
+fi
+
+TERMS=$(mktemp)
+trap 'rm -f "$TERMS"' EXIT
+grep -v -E '^[[:space:]]*(#|$)' "$DENYLIST" > "$TERMS" || true
+if [ ! -s "$TERMS" ]; then
+  echo "pre-commit: warning, $DENYLIST has no terms; nothing to check." >&2
+  exit 0
+fi
+
+found=0
+while IFS= read -r -d '' file; do
+  if git show ":$file" | grep -q -i -F -f "$TERMS"; then
+    count=$(git show ":$file" | grep -c -i -F -f "$TERMS")
+    echo "pre-commit: $file has $count line(s) matching the denylist" >&2
+    found=1
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [ "$found" -ne 0 ]; then
+  echo "pre-commit: commit refused. Remove those terms, or keep them in ~/.bench/config.toml instead." >&2
+  exit 1
+fi

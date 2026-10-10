@@ -1,0 +1,76 @@
+# Bench configuration. `bench init` copies this file to ~/.bench/config.toml once and never overwrites it.
+# Paths may start with ~. After editing, run `bench check`.
+
+timezone = "America/Chicago"
+
+# Display labels. The code only knows the keys; the labels live here, outside the repository.
+[areas]
+client = "Client"
+work = "Work"
+personal = "Personal"
+etl = "ETL project"
+
+[cockpit]
+# Bench runs its own private tmux server on this socket. Its folder is created with owner only permissions.
+socket = "~/.bench/state/tmux/bench.sock"
+session = "bench"
+left_session = "bench-left"
+dashboard_window = "dashboard"
+tmux = "tmux"
+# Panes may only start inside these folders.
+allowed_roots = ["~/Projects"]
+
+# Agents window: Terminal One upper left, Terminal Zero lower left, Builder right half.
+[[cockpit.window]]
+name = "agents"
+layout = "builder-right"
+
+[[cockpit.pane]]
+window = "agents"
+role = "Builder"
+position = "right"
+folder = "~/Projects/client-app"
+command = ["claude", "--add-dir", "~/Projects/client-notes"]
+
+[[cockpit.pane]]
+window = "agents"
+role = "Terminal One"
+position = "left-top"
+folder = "~/Projects/client-app"
+command = ["claude", "--add-dir", "~/Projects/client-notes"]
+
+[[cockpit.pane]]
+window = "agents"
+role = "Terminal Zero"
+position = "left-bottom"
+folder = "~/Projects/client-app"
+command = ["claude", "--add-dir", "~/Projects/client-notes"]
+
+# Plain shell windows. Leave out `command` for an ordinary shell.
+[[cockpit.window]]
+name = "server"
+folder = "~/Projects/client-app"
+
+[[cockpit.window]]
+name = "database"
+folder = "~/Projects/client-app"
+
+[[cockpit.window]]
+name = "git"
+folder = "~/Projects/client-app"
+
+[[cockpit.window]]
+name = "dashboard"
+folder = "~/Projects/bench"
+
+[caffeinate]
+flags = "-di"                      # keep the display and the Mac awake while idle
+prevent_system_sleep_on_ac = false # true adds -s (only has effect on AC power)
+battery_floor_percent = 40         # on battery, stop below this charge
+poll_seconds = 60                  # how often the guard checks the battery
+max_failed_readings = 3            # stop after this many unreadable battery checks in a row
+notify_on_stop = true              # macOS notification when the guard stops on its own
+
+[project]
+# Variable names project needs in a fresh shell. Names only; values are never read or printed.
+required_env = []
