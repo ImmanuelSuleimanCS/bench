@@ -62,6 +62,7 @@ folder = "~/Projects/client-app"
 [[cockpit.window]]
 name = "dashboard"
 folder = "~/Projects/bench"
+command = ["bench"]                # the dashboard; quitting it with q leaves a shell
 
 [caffeinate]
 flags = "-di"                      # keep the display and the Mac awake while idle
@@ -72,5 +73,5 @@ max_failed_readings = 3            # stop after this many unreadable battery che
 notify_on_stop = true              # macOS notification when the guard stops on its own
 
 [project]
-# Variable names project needs in a fresh shell. Names only; values are never read or printed.
+# Variable names the project needs in a fresh shell. Names only; values are never read or printed.
 required_env = []

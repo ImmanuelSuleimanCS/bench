@@ -1,8 +1,9 @@
-"""The `bench` command line: init, check, cockpit, caffeinate."""
+"""The `bench` command line: the dashboard (no arguments), init, check, backup, restore, cockpit, caffeinate."""
 import argparse
 import os
 import shutil
 import subprocess
+import sqlite3
 import sys
 from importlib import resources
 from pathlib import Path
@@ -12,6 +13,7 @@ from bench.caffeinate import guard
 from bench.cockpit import plan as cockpit_plan
 from bench.cockpit.tmux import Tmux, TmuxError
 from bench.config import Config, ConfigError, load
+from bench.db import backup, core, migrate, report
 
 RED = "\033[31m"
 GREEN = "\033[32m"
@@ -27,12 +29,17 @@ def green(text: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="bench", description="Bench, a personal command center for the Mac.")
+    parser = argparse.ArgumentParser(prog="bench", description="Bench, a personal command center for the Mac. With no command, opens the dashboard.")
     parser.add_argument("--version", action="version", version=f"bench {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    sub.add_parser("init", help="create ~/.bench and a starting config.toml (never overwrites)")
-    sub.add_parser("check", help="check config, folders, tools, and auto loaded Claude Code context")
+    sub.add_parser("init", help="create ~/.bench, a starting config.toml (never overwrites), and the area databases")
+    sub.add_parser("check", help="check config, folders, tools, databases, and auto loaded Claude Code context")
+    back = sub.add_parser("backup", help="back up the area databases now (all, or one area)")
+    back.add_argument("area", nargs="?", choices=core.AREAS)
+    rest = sub.add_parser("restore", help="replace one area's database with a backup (asks you to type restore)")
+    rest.add_argument("area", choices=core.AREAS)
+    rest.add_argument("file", type=Path)
 
     cockpit = sub.add_parser("cockpit", help="the tmux cockpit")
     csub = cockpit.add_subparsers(dest="action", required=True)
@@ -54,10 +61,16 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     try:
+        if args.command is None:
+            return cmd_dashboard()
         if args.command == "init":
             return cmd_init()
         if args.command == "check":
             return cmd_check()
+        if args.command == "backup":
+            return cmd_backup(args)
+        if args.command == "restore":
+            return cmd_restore(args)
         if args.command == "cockpit":
             return cmd_cockpit(args)
         if args.command == "caffeinate":
@@ -67,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except TmuxError as exc:
         print(red(f"tmux problem: {exc}"))
+        return 2
+    except (core.DatabaseError, sqlite3.Error) as exc:
+        print(red(f"database problem: {exc}"))
         return 2
     except KeyboardInterrupt:
         print("\nCancelled. Nothing more was done.")
@@ -105,6 +121,12 @@ def cmd_init() -> int:
         )
         denylist.chmod(0o600)
         print(f"wrote {denylist} (add your terms to it)")
+
+    for area in core.AREAS:
+        existed = core.db_path(area).exists()
+        for line in migrate.prepare(area):
+            print(line)
+        print(f"database {area}: {core.db_path(area)} {'already there' if existed else 'created'}")
     return 0
 
 
@@ -152,6 +174,12 @@ def cmd_check() -> int:
             problems += line.endswith("missing")
 
     print()
+    print("databases:")
+    for text, ok in report.area_lines(cfg):
+        print(f"  {text}" if ok else red(f"  {text}"))
+        problems += not ok
+
+    print()
     print("\n".join(guard.status_lines()))
 
     print()
@@ -181,6 +209,59 @@ def _env_presence(names: list[str]) -> list[str]:
     )
     lines = [l for l in result.stdout.splitlines() if l.endswith((" present", " missing"))]
     return [f"project env {l}" for l in lines]
+
+
+# ---------------------------------------------------------------- dashboard and databases
+
+def cmd_dashboard() -> int:
+    """Bring each area database up to date (backing up first), take any daily backups due, then open."""
+    cfg = load(paths.config_file())
+    notes = []
+    for area in core.AREAS:
+        try:
+            notes += migrate.prepare(area)
+            made = backup.daily_if_due(area)
+            if made:
+                notes.append(f"{area}: daily backup {made.name}")
+        except (core.DatabaseError, sqlite3.Error) as exc:
+            notes.append(f"{area}: database problem: {exc}")
+    from bench.tui.app import BenchApp
+
+    # The dashboard keeps every area database open while it runs (Stage E reads and writes through these
+    # connections), so `bench restore` refuses until the dashboard quits.
+    connections = {area: core.connect(core.db_path(area)) for area in core.AREAS}
+    try:
+        BenchApp(cfg, notes, connections=connections).run()
+    finally:
+        for conn in connections.values():
+            conn.close()
+    return 0
+
+
+def cmd_backup(args) -> int:
+    areas = [args.area] if args.area else list(core.AREAS)
+    made = 0
+    for area in areas:
+        if not core.db_path(area).exists():
+            print(red(f"{area}: no database yet; run `bench init`"))
+            continue
+        path = backup.backup(area, "daily")
+        print(green(f"{area}: {path} (integrity ok)"))
+        made += 1
+    return 0 if made == len(areas) else 1
+
+
+def cmd_restore(args) -> int:
+    source = args.file.expanduser().resolve()
+    print(f"This replaces the {args.area} database with {source}.")
+    print("The current database is backed up first, and nothing happens while Bench has it open.")
+    typed = input("Type restore to confirm: ")
+    if typed.strip() != "restore":
+        print("Not confirmed. Nothing was changed.")
+        return 1
+    for line in backup.restore(args.area, source):
+        print(green(line))
+    return 0
 
 
 # ---------------------------------------------------------------- cockpit

@@ -133,7 +133,6 @@ def load(path: Path) -> Config:
     project = data.get("project", {})
     _check_keys("[project]", project, {"required_env"}, set(), path)
     required_env = _want("[project]", "required_env", project.get("required_env", []), list, path)
-
     if not all(isinstance(name, str) and name.isidentifier() for name in required_env):
         raise ConfigError(f"{path}: [project]: key 'required_env' must list variable names only")
 
