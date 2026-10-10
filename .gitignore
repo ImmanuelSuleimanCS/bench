@@ -1,0 +1,16 @@
+# Python and uv
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# Bench data never belongs in the repository
+.bench/
+*.db
+*.sock
