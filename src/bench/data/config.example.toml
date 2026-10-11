@@ -15,7 +15,7 @@ etl = "ETL project"
 socket = "~/.bench/state/tmux/bench.sock"
 session = "bench"
 left_session = "bench-left"
-dashboard_window = "dashboard"
+dashboard_window = "shells"         # the window `bench cockpit attach --left` opens on
 tmux = "tmux"
 # Panes may only start inside these folders.
 allowed_roots = ["~/Projects"]
@@ -46,21 +46,33 @@ position = "left-bottom"
 folder = "~/Projects/client-app"
 command = ["claude", "--add-dir", "~/Projects/client-notes"]
 
-# Plain shell windows. Leave out `command` for an ordinary shell.
+# Shells window: four panes in a two by two grid. Leave out `command` for an ordinary shell.
 [[cockpit.window]]
-name = "server"
+name = "shells"
+layout = "grid"
+
+[[cockpit.pane]]
+window = "shells"
+role = "dev"
+position = "bottom-right"
 folder = "~/Projects/client-app"
 
-[[cockpit.window]]
-name = "database"
+[[cockpit.pane]]
+window = "shells"
+role = "db"
+position = "top-right"
 folder = "~/Projects/client-app"
 
-[[cockpit.window]]
-name = "git"
+[[cockpit.pane]]
+window = "shells"
+role = "git"
+position = "bottom-left"
 folder = "~/Projects/client-app"
 
-[[cockpit.window]]
-name = "dashboard"
+[[cockpit.pane]]
+window = "shells"
+role = "dashboard"
+position = "top-left"
 folder = "~/Projects/bench"
 command = ["bench"]                # the dashboard; quitting it with q leaves a shell
 

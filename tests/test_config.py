@@ -11,13 +11,16 @@ def test_example_config_loads(tmp_path):
     example = tmp_path / "config.toml"
     example.write_text((resources.files("bench") / "data" / "config.example.toml").read_text())
     cfg = load(example)
-    assert [w.name for w in cfg.cockpit.windows] == ["agents", "server", "database", "git", "dashboard"]
+    assert [w.name for w in cfg.cockpit.windows] == ["agents", "shells"]
     agents = cfg.cockpit.windows[0]
     assert {p.position: p.role for p in agents.panes} == {
         "right": "Builder", "left-top": "Terminal One", "left-bottom": "Terminal Zero"}
     builder = next(p for p in agents.panes if p.role == "Builder")
     assert builder.command[0] == "claude"
     assert builder.command[2] == str(Path("~/Projects/client-notes").expanduser())
+    shells = cfg.cockpit.windows[1]
+    assert shells.layout == "grid" and cfg.cockpit.dashboard_window == "shells"
+    assert {p.position: p.role for p in shells.panes} == {"top-left": "dashboard", "top-right": "db", "bottom-left": "git", "bottom-right": "dev"}
     assert cfg.caffeinate.flags == "-di"
     assert cfg.areas["work"] == "Work"
 
