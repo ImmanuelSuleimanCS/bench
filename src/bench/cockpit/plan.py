@@ -134,3 +134,21 @@ def status_lines(cockpit: CockpitConfig, panes: list[PaneState]) -> list[str]:
 def is_busy(spec: PaneSpec, state: PaneState) -> bool:
     """True when a program other than a shell is running in the pane."""
     return not state.dead and state.current_command not in SHELLS
+
+def attach_argv(cockpit: CockpitConfig, base: list[str], left: bool, left_exists: bool, window: str | None) -> list[str]:
+    """The tmux command that attaches a Terminal window to the cockpit, always opening on a known window.
+
+    The right monitor uses the main session and opens on the first window (agents). The left monitor uses
+    the grouped left session and opens on the dashboard. `window` picks another window by name. A session
+    remembers the window it was last on, so the window is selected every time, before attaching.
+    """
+    names = [w.name for w in cockpit.windows]
+    if window is None:
+        window = cockpit.dashboard_window if left else names[0]
+    if window not in names:
+        raise ValueError(f"no window named {window!r}; the windows are {', '.join(names)}")
+    if left and not left_exists:
+        return [*base, "new-session", "-t", f"={cockpit.session}", "-s", cockpit.left_session,
+                ";", "select-window", "-t", f"={cockpit.left_session}:{window}"]
+    target = cockpit.left_session if left else cockpit.session
+    return [*base, "select-window", "-t", f"={target}:{window}", ";", "attach", "-t", f"={target}"]

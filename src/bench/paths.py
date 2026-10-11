@@ -38,6 +38,10 @@ def backups_dir() -> Path:
     return bench_home() / "backups"
 
 
+def exports_dir() -> Path:
+    return bench_home() / "exports"
+
+
 # Folder name and permission bits for everything `bench init` creates.
 PRIVATE = 0o700
 FOLDERS = ("state", "state/tmux", "state/caffeinate", "data", "backups", "exports", "logs")

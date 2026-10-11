@@ -48,7 +48,8 @@ def main(argv: list[str] | None = None) -> int:
     restart = csub.add_parser("restart", help="restart one pane by its role")
     restart.add_argument("role")
     attach = csub.add_parser("attach", help="attach this Terminal window to the cockpit")
-    attach.add_argument("--left", action="store_true", help="attach the left monitor window (dashboard)")
+    attach.add_argument("--left", action="store_true", help="the left monitor's view, opening on the dashboard")
+    attach.add_argument("--window", help="open on this window instead, for example git")
     csub.add_parser("kill", help="stop the cockpit and everything running in it (asks you to type kill)")
 
     caf = sub.add_parser("caffeinate", help="keep the Mac awake")
@@ -213,25 +214,39 @@ def _env_presence(names: list[str]) -> list[str]:
 
 # ---------------------------------------------------------------- dashboard and databases
 
+def daily_backups() -> list[str]:
+    """Take each area's daily backup if the newest is more than a day old. One short line per backup made."""
+    notes = []
+    for area in core.AREAS:
+        try:
+            made = backup.daily_if_due(area)
+            if made:
+                notes.append(f"{area}: daily backup {made.name}")
+        except (core.DatabaseError, sqlite3.Error, OSError) as exc:
+            notes.append(f"{area}: backup problem: {exc}")
+    return notes
+
+
 def cmd_dashboard() -> int:
-    """Bring each area database up to date (backing up first), take any daily backups due, then open."""
+    """Bring each area database up to date (backing up first), take any daily backups due, then open.
+
+    While it runs, the dashboard checks for a due daily backup on every refresh.
+    """
     cfg = load(paths.config_file())
     notes = []
     for area in core.AREAS:
         try:
             notes += migrate.prepare(area)
-            made = backup.daily_if_due(area)
-            if made:
-                notes.append(f"{area}: daily backup {made.name}")
         except (core.DatabaseError, sqlite3.Error) as exc:
             notes.append(f"{area}: database problem: {exc}")
+    notes += daily_backups()
     from bench.tui.app import BenchApp
 
     # The dashboard keeps every area database open while it runs (Stage E reads and writes through these
     # connections), so `bench restore` refuses until the dashboard quits.
     connections = {area: core.connect(core.db_path(area)) for area in core.AREAS}
     try:
-        BenchApp(cfg, notes, connections=connections).run()
+        BenchApp(cfg, notes, connections=connections, take_backups=daily_backups).run()
     finally:
         for conn in connections.values():
             conn.close()
@@ -349,15 +364,12 @@ def cmd_cockpit(args) -> int:
         if not tmux.has_session(session):
             print(red("The cockpit is not running. Run `bench cockpit build` first."))
             return 1
-        if args.left:
-            left = cfg.cockpit.left_session
-            if tmux.has_session(left):
-                argv = [*tmux.base(), "attach", "-t", f"={left}"]
-            else:
-                argv = [*tmux.base(), "new-session", "-t", f"={session}", "-s", left,
-                        ";", "select-window", "-t", f"={left}:{cfg.cockpit.dashboard_window}"]
-        else:
-            argv = [*tmux.base(), "attach", "-t", f"={session}"]
+        left_exists = args.left and tmux.has_session(cfg.cockpit.left_session)
+        try:
+            argv = cockpit_plan.attach_argv(cfg.cockpit, tmux.base(), args.left, left_exists, args.window)
+        except ValueError as exc:
+            print(red(str(exc)))
+            return 1
         os.execvp(argv[0], argv)
 
     if args.action == "kill":

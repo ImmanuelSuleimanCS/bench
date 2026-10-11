@@ -4,6 +4,7 @@ Every problem is reported with the file name and the key, so a typo points strai
 Folder checks (does it exist, is it allowed) are done later by bench.safety, because a missing project
 folder should not stop `bench caffeinate` from working.
 """
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -56,6 +57,13 @@ class CaffeinateConfig:
 
 
 @dataclass
+class TasksConfig:
+    checked_areas: list[str] = field(default_factory=lambda: ["work"])
+    hostname_patterns: list[str] = field(default_factory=list)
+    archive_after_days: int = 14
+
+
+@dataclass
 class Config:
     path: Path
     timezone: str
@@ -63,6 +71,7 @@ class Config:
     cockpit: CockpitConfig
     caffeinate: CaffeinateConfig
     required_env: list[str] = field(default_factory=list)
+    tasks: TasksConfig = field(default_factory=TasksConfig)
 
 
 def _expand(value: str) -> Path:
@@ -106,7 +115,7 @@ def load(path: Path) -> Config:
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: not valid TOML: {exc}") from exc
 
-    _check_keys("top level", data, {"timezone", "areas", "cockpit", "caffeinate", "project"}, {"cockpit"}, path)
+    _check_keys("top level", data, {"timezone", "areas", "cockpit", "caffeinate", "project", "tasks"}, {"cockpit"}, path)
     timezone = _want("top level", "timezone", data.get("timezone", "America/Chicago"), str, path)
 
     areas = data.get("areas", {})
@@ -136,7 +145,30 @@ def load(path: Path) -> Config:
     if not all(isinstance(name, str) and name.isidentifier() for name in required_env):
         raise ConfigError(f"{path}: [project]: key 'required_env' must list variable names only")
 
-    return Config(path, timezone, dict(areas), cockpit, caffeinate, list(required_env))
+    tasks = _load_tasks(data.get("tasks", {}), path)
+
+    return Config(path, timezone, dict(areas), cockpit, caffeinate, list(required_env), tasks)
+
+
+def _load_tasks(table: dict, path: Path) -> TasksConfig:
+    where = "[tasks]"
+    defaults = TasksConfig()
+    _check_keys(where, table, set(vars(defaults)), set(), path)
+    checked = _want(where, "checked_areas", table.get("checked_areas", defaults.checked_areas), list, path)
+    if not all(area in {"client", "work", "personal", "etl"} for area in checked):
+        raise ConfigError(f"{path}: {where}: key 'checked_areas' may only list client, work, personal, etl")
+    patterns = _want(where, "hostname_patterns", table.get("hostname_patterns", []), list, path)
+    for pattern in patterns:
+        if not isinstance(pattern, str):
+            raise ConfigError(f"{path}: {where}: key 'hostname_patterns' must be a list of text patterns")
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ConfigError(f"{path}: {where}: hostname pattern number {patterns.index(pattern) + 1} is not a valid pattern: {exc}") from None
+    days = _want(where, "archive_after_days", table.get("archive_after_days", defaults.archive_after_days), int, path)
+    if days < 1:
+        raise ConfigError(f"{path}: {where}: key 'archive_after_days' must be at least 1")
+    return TasksConfig(list(checked), list(patterns), days)
 
 
 def _load_cockpit(table: dict, path: Path) -> CockpitConfig:
