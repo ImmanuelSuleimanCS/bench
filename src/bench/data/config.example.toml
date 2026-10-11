@@ -75,3 +75,11 @@ notify_on_stop = true              # macOS notification when the guard stops on 
 [project]
 # Variable names the project needs in a fresh shell. Names only; values are never read or printed.
 required_env = []
+
+[tasks]
+# Task titles, notes, and project names in these areas get the sensitive text check before saving:
+# ten digit numbers, email addresses, and the hostname patterns below. It only warns, and the matched
+# text is shown on screen and nowhere else.
+checked_areas = ["work"]
+hostname_patterns = []             # regular expressions, for example "\\.internal\\b"
+archive_after_days = 14            # b in the Tasks screen offers to archive done tasks older than this

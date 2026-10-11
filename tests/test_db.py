@@ -33,9 +33,9 @@ def test_new_database_is_owner_only_and_migrated(bench_home):
     lines = migrate.prepare("client")
     path = core.db_path("client")
     assert path.stat().st_mode & 0o777 == 0o600
-    assert lines == ["client: applied common/0001_tasks.sql"]
+    assert lines == ["client: applied common/0001_tasks.sql, common/0002_no_delete.sql"]
     conn = connect("client")
-    assert migrate.versions(conn) == {"common": 1}
+    assert migrate.versions(conn) == {"common": 2}
     assert conn.execute("PRAGMA foreign_keys").fetchone() == (1,)
     assert conn.execute("PRAGMA journal_mode").fetchone() == ("wal",)
     conn.close()
@@ -74,7 +74,7 @@ def test_transaction_is_all_or_nothing(bench_home):
 
 
 def test_backup_is_taken_before_a_migration(bench_home, tmp_path):
-    migrate.prepare("client")
+    migrate.prepare("client", migrations_root(tmp_path / "v1", {}))  # start from common 1 only
     conn = connect("client")
     conn.execute("INSERT INTO projects (name, created_at) VALUES ('kept', ?)", (core.utc_now(),))
     conn.close()
@@ -93,7 +93,7 @@ def test_backup_is_taken_before_a_migration(bench_home, tmp_path):
 
 
 def test_a_failed_migration_changes_nothing(bench_home, tmp_path):
-    migrate.prepare("client")
+    migrate.prepare("client", migrations_root(tmp_path / "v1", {}))  # start from common 1 only
     root = migrations_root(tmp_path, {"common/0002_bad.sql": "CREATE TABLE half (x INTEGER);\nTHIS IS NOT SQL;"})
     with pytest.raises(migrate.MigrationError, match="0002_bad.sql failed and was rolled back"):
         migrate.prepare("client", root)
