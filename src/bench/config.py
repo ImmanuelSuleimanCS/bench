@@ -11,6 +11,7 @@ from pathlib import Path
 
 POSITIONS = {
     "builder-right": ("left-top", "left-bottom", "right"),
+    "grid": ("top-left", "top-right", "bottom-left", "bottom-right"),
     "single": ("full",),
 }
 

@@ -13,11 +13,22 @@ SHELLS = {"zsh", "-zsh", "bash", "-bash", "sh", "login", "arch"}
 
 # Order in which panes of a layout are created, and how to split for each one:
 # a list of (existing position to split from, tmux split flags), tried in order.
-CREATE_ORDER = {"builder-right": ("left-top", "right", "left-bottom"), "single": ("full",)}
+CREATE_ORDER = {
+    "builder-right": ("left-top", "right", "left-bottom"),
+    "grid": ("top-left", "top-right", "bottom-left", "bottom-right"),
+    "single": ("full",),
+}
 SPLIT_FROM = {
+    # builder-right
     "right": [("left-top", ["-h"]), ("left-bottom", ["-h"])],
     "left-top": [("left-bottom", ["-v", "-b"]), ("right", ["-h", "-b"])],
     "left-bottom": [("left-top", ["-v"]), ("right", ["-h", "-b"])],
+    # grid: a new grid splits into left and right halves, then each half into top and bottom.
+    # A lost corner is split from the pane below or above it first, so it stays in its own column.
+    "top-left": [("bottom-left", ["-v", "-b"]), ("top-right", ["-h", "-b"])],
+    "top-right": [("bottom-right", ["-v", "-b"]), ("top-left", ["-h"])],
+    "bottom-left": [("top-left", ["-v"]), ("bottom-right", ["-h", "-b"])],
+    "bottom-right": [("top-right", ["-v"]), ("bottom-left", ["-h"])],
 }
 
 
